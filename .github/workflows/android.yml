@@ -1,0 +1,45 @@
+
+name: Build SM Online LIVE APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'SM_Online_LIVE_Android_Source.zip'
+      - '.github/workflows/android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract source
+        run: |
+          unzip SM_Online_LIVE_Android_Source.zip
+          cd SM_Online_LIVE_Android
+          echo "PROJECT_DIR=$PWD" >> $GITHUB_ENV
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-Online-LIVE-APK
+          path: SM_Online_LIVE_Android/app/build/outputs/apk/debug/app-debug.apk
