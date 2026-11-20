@@ -5,41 +5,78 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'SM_Online_LIVE_Android_Source.zip'
+      - '**/*.zip'
+      - '**/*.kt'
+      - '**/*.kts'
       - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract source
+      - name: Find Android project
+        shell: bash
         run: |
-          unzip SM_Online_LIVE_Android_Source.zip
-          cd SM_Online_LIVE_Android
-          echo "PROJECT_DIR=$PWD" >> $GITHUB_ENV
+          set -euo pipefail
 
-      - name: Set up Gradle
+          PROJECT_DIR=$(find . -type f \
+            -name settings.gradle.kts \
+            -not -path './.git/*' \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            ZIP_FILE=$(find . -type f \
+              -name '*.zip' \
+              -not -path './.git/*' \
+              -print -quit)
+
+            if [ -z "$ZIP_FILE" ]; then
+              echo "ERROR: Android project ZIP not found"
+              exit 1
+            fi
+
+            echo "Extracting: $ZIP_FILE"
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted
+
+            PROJECT_DIR=$(find extracted -type f \
+              -name settings.gradle.kts \
+              -print -quit | xargs -r dirname)
+          fi
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: settings.gradle.kts not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project found: $PROJECT_DIR"
+
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
-      - name: Build APK
+      - name: Build Debug APK
         run: |
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
+          gradle -p "$PROJECT_DIR" assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SM-Online-LIVE-APK
-          path: SM_Online_LIVE_Android/app/build/outputs/apk/debug/app-debug.apk
+          name: SM-Online-LIVE-Demo-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
